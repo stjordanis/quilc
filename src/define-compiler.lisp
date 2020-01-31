@@ -301,7 +301,18 @@ OPTIONS: plist of options governing applicability of the compiler binding."
 (define-condition no-binding-match (serious-condition) ())
 
 (defun prefer-concrete-items (a b)
+  "Return one of A or B, choosing the one that is more \"concrete\".
+
+What \"concrete\" means depends on the types of A and B:
+
+  * If A (B) is a SYMBOL, and B (A) is not, return B (A). In this case we are choosing a value that should not be a wildcard-type value.
+
+  * If neither are symbols and they are equal to one another, return either. In this case both have a non-wildcard-type value.
+
+  * If both are symbols, then return either. In this case both are wildcard symbols and neither is more \"concrete\" than the other."
   (cond
+    ((and (symbolp a) (symbolp b))
+     b)
     ((and (symbolp a) (not (symbolp b)))
      b)
     ((and (not (symbolp a)) (symbolp b))
@@ -325,31 +336,23 @@ OPTIONS: plist of options governing applicability of the compiler binding."
     (t
      (mapcar #'prefer-concrete-items a b))))
 
-(defun fill-in-gate-binding-arguments-with-junk (gate)
-  (let ((gate-arguments (gate-binding-arguments gate)))
-    (if (every #'wildcard-pattern-p gate-arguments)
-        (copy-binding gate :arguments (a:iota (length gate-arguments)))
-        gate)))
-
 (defgeneric binding-meet (a b)
   (:documentation "Constructs a maximal binding subsumed by both A and B.")
   (:method (a b)
     (error 'cannot-concretize-binding))
   (:method ((a gate-binding) (b gate-binding))
-    (let ((a (fill-in-gate-binding-arguments-with-junk a))
-          (b (fill-in-gate-binding-arguments-with-junk b)))
-      (make-gate-binding :operator (prefer-concrete-items (gate-binding-operator a) (gate-binding-operator b))
-                         :parameters (prefer-concrete-lists (gate-binding-parameters a)
-                                                            (gate-binding-parameters b))
-                         :arguments (prefer-concrete-lists (gate-binding-arguments a)
-                                                           (gate-binding-arguments b)))))
+    (make-gate-binding :operator (prefer-concrete-items (gate-binding-operator a) (gate-binding-operator b))
+                       :parameters (prefer-concrete-lists (gate-binding-parameters a)
+                                                          (gate-binding-parameters b))
+                       :arguments (prefer-concrete-lists (gate-binding-arguments a)
+                                                         (gate-binding-arguments b))))
   (:method ((a gate-binding) (b wildcard-binding))
     a)
   (:method ((a wildcard-binding) (b gate-binding))
     b))
 
 (defgeneric instantiate-binding (binding)
-  (:documentation "When possible, construct the unique instruction on which BINDING will match.")
+  (:documentation "When possible, construct the unique instruction on which BINDING will match. If any of the binding's arguments are unspecified (i.e. match against any qubit), those arguments will filled-in with unique qubit indices.")
   (:method (binding)
     (error 'cannot-concretize-binding))
   (:method ((binding gate-binding))
@@ -359,7 +362,11 @@ OPTIONS: plist of options governing applicability of the compiler binding."
               (some #'symbolp (gate-binding-parameters binding)))
       (error 'cannot-concretize-binding))
     (when (some #'symbolp (gate-binding-arguments binding))
-      (error 'cannot-concretize-binding))
+      (let* ((usedq (gate-binding-arguments binding))
+             (availableq (set-difference (a:iota (length usedq)) usedq)))
+        (setf binding (copy-binding binding
+                                    :arguments (mapcar (lambda (q) (if (symbolp q) (pop availableq) q))
+                                                       usedq)))))
     (apply #'build-gate
            (gate-binding-operator binding)
            (gate-binding-parameters binding)
@@ -722,10 +729,11 @@ N.B.: The word \"shortest\" here is a bit fuzzy.  In practice it typically means
         :for gate := (handler-case (instantiate-binding (binding-meet gate-binding binding))
                        (cannot-concretize-binding () nil)
                        (no-binding-match () nil))
-        :when gate :collect gate))
+        :when gate
+          :collect gate))
 
 (defun compute-applicable-reducers (gateset &key (compilers **compilers-available**))
-  "Returns all those compilers (including those which match on sequences of instructions rather than single instructions) which improve the brevity of a gate sequence without exiting a particular GATESET."
+  "Returns all those compilers (including those which match on sequences of instructions rather than single instructions) which improve the brevity of a gate sequence without exiting a particular GATESET. The optional COMPILERS specifies the list of compilers from which the applicable reducers should be selected. By default COMPILERS is the globally-defined compilers list."
   (labels
       ((calculate-fidelity-of-concrete-gates (gates)
          (loop :with fidelity := 1d0

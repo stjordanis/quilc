@@ -282,6 +282,7 @@
                   (dohash ((binding record) gate-info)
                     (when (and (gate-binding-p binding)
                                (equalp (named-operator "RX") (gate-binding-operator binding))
+                               (and (numberp (first (gate-binding-parameters binding))))
                                (not (double= 0d0 (first (gate-binding-parameters binding)))))
                       (unless (double= 0d0 (mod (first (gate-binding-parameters binding)) pi/2))
                         (warn "Qubit ~A: applying f1QRB spec to unusual native gate RX(~A)" i (first (gate-binding-parameters binding))))

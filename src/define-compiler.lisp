@@ -325,7 +325,8 @@ OPTIONS: plist of options governing applicability of the compiler binding."
     (t
      (mapcar #'prefer-concrete-items a b))))
 
-(defun fill-in-gate-binding-arguments-with-junk (gate)
+(defun concretize-gate-binding-arguments (gate)
+  "If GATE's arguments are all wildcards (i.e. they match any qubit) then return a new GATE-BINDING object whose arguments are unique qubit integers. Does not mutate GATE."
   (let ((gate-arguments (gate-binding-arguments gate)))
     (if (every #'wildcard-pattern-p gate-arguments)
         (copy-binding gate :arguments (a:iota (length gate-arguments)))
@@ -336,8 +337,8 @@ OPTIONS: plist of options governing applicability of the compiler binding."
   (:method (a b)
     (error 'cannot-concretize-binding))
   (:method ((a gate-binding) (b gate-binding))
-    (let ((a (fill-in-gate-binding-arguments-with-junk a))
-          (b (fill-in-gate-binding-arguments-with-junk b)))
+    (let ((a (concretize-gate-binding-arguments a))
+          (b (concretize-gate-binding-arguments b)))
       (make-gate-binding :operator (prefer-concrete-items (gate-binding-operator a) (gate-binding-operator b))
                          :parameters (prefer-concrete-lists (gate-binding-parameters a)
                                                             (gate-binding-parameters b))

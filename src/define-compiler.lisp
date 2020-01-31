@@ -325,17 +325,24 @@ OPTIONS: plist of options governing applicability of the compiler binding."
     (t
      (mapcar #'prefer-concrete-items a b))))
 
+(defun fill-in-gate-binding-arguments-with-junk (gate)
+  (let ((gate-arguments (gate-binding-arguments gate)))
+    (if (every #'wildcard-pattern-p gate-arguments)
+        (copy-binding gate :arguments (a:iota (length gate-arguments)))
+        gate)))
+
 (defgeneric binding-meet (a b)
   (:documentation "Constructs a maximal binding subsumed by both A and B.")
   (:method (a b)
     (error 'cannot-concretize-binding))
   (:method ((a gate-binding) (b gate-binding))
-    
-    (make-gate-binding :operator (prefer-concrete-items (gate-binding-operator a) (gate-binding-operator b))
-                       :parameters (prefer-concrete-lists (gate-binding-parameters a)
-                                                          (gate-binding-parameters b))
-                       :arguments (prefer-concrete-lists (gate-binding-arguments a)
-                                                         (gate-binding-arguments b))))
+    (let ((a (fill-in-gate-binding-arguments-with-junk a))
+          (b (fill-in-gate-binding-arguments-with-junk b)))
+      (make-gate-binding :operator (prefer-concrete-items (gate-binding-operator a) (gate-binding-operator b))
+                         :parameters (prefer-concrete-lists (gate-binding-parameters a)
+                                                            (gate-binding-parameters b))
+                         :arguments (prefer-concrete-lists (gate-binding-arguments a)
+                                                           (gate-binding-arguments b)))))
   (:method ((a gate-binding) (b wildcard-binding))
     a)
   (:method ((a wildcard-binding) (b gate-binding))
@@ -710,7 +717,14 @@ N.B.: The word \"shortest\" here is a bit fuzzy.  In practice it typically means
                   sorted-compilers)))
           compilers-with-features)))))
 
-(defun compute-applicable-reducers (gateset)
+(defun gates-that-match-binding (binding gateset)
+  (loop :for gate-binding :being :the :hash-keys :of gateset
+        :for gate := (handler-case (instantiate-binding (binding-meet gate-binding binding))
+                       (cannot-concretize-binding () nil)
+                       (no-binding-match () nil))
+        :when gate :collect gate))
+
+(defun compute-applicable-reducers (gateset &key (compilers **compilers-available**))
   "Returns all those compilers (including those which match on sequences of instructions rather than single instructions) which improve the brevity of a gate sequence without exiting a particular GATESET."
   (labels
       ((calculate-fidelity-of-concrete-gates (gates)
@@ -723,12 +737,6 @@ N.B.: The word \"shortest\" here is a bit fuzzy.  In practice it typically means
                          ;; only executes if no binding subsumes the gate
                          :finally (error 'no-binding-match))
                :finally (return fidelity)))
-       (gates-that-match-binding (binding)
-         (loop :for gate-binding :being :the :hash-keys :of gateset
-               :for gate := (handler-case (instantiate-binding (binding-meet gate-binding binding))
-                              (cannot-concretize-binding () nil)
-                              (no-binding-match () nil))
-               :when gate :collect gate))
        (consider-input-test-case (compiler &rest gates)
          (handler-case
              (let* ((input-fidelity (calculate-fidelity-of-concrete-gates gates))
@@ -770,7 +778,7 @@ N.B.: The word \"shortest\" here is a bit fuzzy.  In practice it typically means
                   (>= out-fidelity in-fidelity)))
            ;; if that falls through, try the exhaustive match
            (let ((matches (loop :for binding :in (compiler-bindings compiler)
-                                :for match := (gates-that-match-binding binding)
+                                :for match := (gates-that-match-binding binding gateset)
                                 :when (null match)
                                   :do (return-from consider-compiler nil)
                                 :collect match)))
@@ -779,7 +787,7 @@ N.B.: The word \"shortest\" here is a bit fuzzy.  In practice it typically means
              (every #'identity (apply #'a:map-product (a:curry #'consider-input-test-case compiler) matches)))))))
     
     (let (applicable-compilers)
-      (dolist (compiler **compilers-available** applicable-compilers)
+      (dolist (compiler compilers applicable-compilers)
         (when (consider-compiler compiler)
           (push compiler applicable-compilers))))))
 

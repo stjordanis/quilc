@@ -723,10 +723,11 @@ N.B.: The word \"shortest\" here is a bit fuzzy.  In practice it typically means
         :for gate := (handler-case (instantiate-binding (binding-meet gate-binding binding))
                        (cannot-concretize-binding () nil)
                        (no-binding-match () nil))
-        :when gate :collect gate))
+        :when gate
+          :collect gate))
 
 (defun compute-applicable-reducers (gateset &key (compilers **compilers-available**))
-  "Returns all those compilers (including those which match on sequences of instructions rather than single instructions) which improve the brevity of a gate sequence without exiting a particular GATESET."
+  "Returns all those compilers (including those which match on sequences of instructions rather than single instructions) which improve the brevity of a gate sequence without exiting a particular GATESET. The optional COMPILERS specifies the list of compilers from which the applicable reducers should be selected. By default COMPILERS is the globally-defined compilers list."
   (labels
       ((calculate-fidelity-of-concrete-gates (gates)
          (loop :with fidelity := 1d0

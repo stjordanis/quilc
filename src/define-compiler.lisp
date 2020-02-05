@@ -539,12 +539,12 @@ Optionally constrains the output to include only those bindings of a particular 
 
 (defun occurrence-table-cost-> (x y)
   (cond
-    ((> (occurrence-table-cost-unknowns x)
-        (occurrence-table-cost-unknowns y))
-     t)
+    ((>= (occurrence-table-cost-unknowns x)
+         (occurrence-table-cost-unknowns y))
+     nil)
     ((< (occurrence-table-cost-unknowns x)
         (occurrence-table-cost-unknowns y))
-     nil)
+     t)
     ((> (occurrence-table-cost-fidelity x)
         (occurrence-table-cost-fidelity y))
      t)

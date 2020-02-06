@@ -352,7 +352,7 @@ What \"concrete\" means depends on the types of A and B:
     b))
 
 (defgeneric instantiate-binding (binding)
-  (:documentation "When possible, construct the unique instruction on which BINDING will match. If any of the binding's arguments are unspecified (i.e. match against any qubit), those arguments will filled-in with unique qubit indices.")
+  (:documentation "When possible, construct the unique instruction on which BINDING will match. If any of the binding's arguments are unspecified (i.e. match against any qubit), those arguments will be filled-in with unique qubit indices.")
   (:method (binding)
     (error 'cannot-concretize-binding))
   (:method ((binding gate-binding))
